@@ -12,7 +12,7 @@ int sampling_light = 0;
 
 float sigma_a = 0.1f; // ABSORPTION
 float sigma_s = 0.2f; // SCATTERING
-float sigma_t = sigma_a + sigma_t; // EXTINCTION
+float sigma_t = sigma_a + sigma_s; // EXTINCTION
 
 // Right now this is a copy of EyeLight renderer. The task is to change this 
 // to a full-fledged path tracer.
