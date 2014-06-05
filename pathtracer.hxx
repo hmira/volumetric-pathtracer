@@ -11,9 +11,9 @@
 int sampling_light = 0;
 
 float sigma_a = 0.1f; // ABSORPTION
-//float sigma_s = 0.2f; // SCATTERING
+float sigma_s = 0.2f; // SCATTERING
 //float sigma_a = 0.0f; // ABSORPTION
-float sigma_s = 0.0f; // SCATTERING
+//float sigma_s = 0.0f; // SCATTERING
 float sigma_t = sigma_a + sigma_s; // EXTINCTION
 
 // Right now this is a copy of EyeLight renderer. The task is to change this 
@@ -162,7 +162,7 @@ public:
 		}
 		else
 		{
-			if (hit.lightID >= 0) accum += mScene.GetLightPtr(hit.lightID)->getRadiance() * e_pow_sigma_t(hit.dist);
+			if (hit.lightID >= 0) accum += mScene.GetLightPtr(hit.lightID)->getRadiance(); // * e_pow_sigma_t(hit.dist);
 
 			/*
 				First, let's decide, which component we want to sample:
@@ -197,7 +197,6 @@ public:
 		{
 			accum =  light->getRadiance() / p0;
 			accum *= e_pow_sigma_t(lightDist);
-			accum *= INV_PI_F * 0.25;
 		}
 
 		return accum;
