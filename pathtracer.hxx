@@ -79,7 +79,7 @@ public:
 		//return Vec3f(0);
 		//return ( sigma_s/sigma_t );
 
-		return (sigma_s/sigma_t) * colorSampleLight2(x, w, frame, mat, sampleDiff, R, frameR);
+		return (sigma_s/sigma_t) * ( INV_PI_F * 0.25) * colorSampleLight2(x, w);
 
 	}
 
@@ -184,15 +184,15 @@ public:
 		return accum;
 	}
 
-	Vec3f colorSampleLight2(Vec3f hitPos, Vec3f wol, Frame frame, Material mat, bool sampleDiff, Vec3f R, Frame frameR)
+	Vec3f colorSampleLight2(Vec3f hitPos, Vec3f wol)
 	{
 		Vec3f accum = Vec3f(0);
 		const AbstractLight* light =  mScene.GetLightPtr(floor(getRand()*mScene.GetLightCount()));
 		float lightDist;
 		Vec3f wig = light->sampleDir(hitPos, lightDist);
 		float p0 = light->getPDF(wig, lightDist) / mScene.GetLightCount();
-		if(wig.IsZero()) return accum;
-		Vec3f wil = frame.ToLocal(wig);
+		//p0 *= 2;
+		//p0 *= PI_F * 4;
 		if( ! mScene.Occluded(hitPos, wig, lightDist) )
 		{
 			accum =  light->getRadiance() / p0;
