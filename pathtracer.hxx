@@ -45,8 +45,8 @@ public:
 
             Ray   ray = mScene.mCamera.GenerateRay(sample);
             
-			//Vec3f rad = getLi(ray);
-			Vec3f rad = directLight(ray);
+			Vec3f rad = getLi(ray);
+			//Vec3f rad = directLight(ray);
 
 			mFramebuffer.AddColor(sample, rad);
         }
@@ -111,19 +111,32 @@ public:
 			float rand =  getRand();
 			bool sampleDiff = rand<mat.pDiff;
 
-			// reflectance: 
-			float rho = sampleDiff ? mat.getReflectanceDiff(wol)*mat.ipDiff : mat.getReflectanceSpec(wol)*mat.ipSpec;
-
-			accum += thrput * colorSampleLight(hitPos, wol, frame, mat, sampleDiff, R, frameR);
-			accum += thrput * colorSampleBRDF (hitPos, wol, frame, mat, sampleDiff, R, frameR, hit, ray, wil, pdf, hits);
-
-
-			if(rand < rho)
+			/* INCLUDED IN SCATTERING */
+			auto s = selectDistance(ray.org, ray.dir);
+			if (s < hit.dist)
 			{
-				if(wil.z<0) break;
-				thrput *= (sampleDiff ? mat.evalBrdfDiff(wil, wol) : mat.evalBrdfSpec(wil, wol))* wil.z / (rho * pdf);
+				// scattering
+				auto xs = ray.org + ray.dir * s;
+				accum += thrput * scatteredRadiance(xs);
+				wil = sampleMedium (hitPos, wol, frame, mat, sampleDiff, R, frameR, hit, ray, pdf, hits);
 			}
-			else break;
+			else
+			{
+	
+				// reflectance: 
+				float rho = sampleDiff ? mat.getReflectanceDiff(wol)*mat.ipDiff : mat.getReflectanceSpec(wol)*mat.ipSpec;
+				accum += thrput * colorSampleLight(hitPos, wol, frame, mat, sampleDiff, R, frameR);
+				wil = sampleBRDF (hitPos, wol, frame, mat, sampleDiff, R, frameR, hit, ray, pdf, hits);
+				if(rand < rho)
+				{
+					if(wil.z<0) break;
+					thrput *= (sampleDiff ? mat.evalBrdfDiff(wil, wol) : mat.evalBrdfSpec(wil, wol))* wil.z / (rho * pdf);
+				}
+				else 
+				{
+					break;
+				}
+			}
 		}
 		return accum;
 	}
@@ -207,6 +220,80 @@ public:
 		}
 
 		return accum;
+	}
+
+
+	/* the sampling function of the medium */
+	Vec3f sampleMedium(
+			const Vec3f hitPos, 
+			const Vec3f wol,
+			const Frame frame,
+			const Material mat,
+			const  bool sampleDiff,
+			const Vec3f R,
+			const Frame frameR,
+			Isect & isect,
+			Ray & n_ray,
+			float & pdf,
+			bool & hits)
+	{
+		float p1, w;
+		Vec2f in = Vec2f(getRand(), getRand());
+		Vec3f wil = SampleUniformSphereW(in, &p1);
+		if(!sampleDiff)	wil = frameR.ToWorld(wil);
+		Vec3f wig = frame.ToWorld(wil);
+
+		n_ray = Ray(hitPos, wig, 0.00001);
+		isect.dist = 1e36f;
+		
+		hits = mScene.Intersect(n_ray, isect);
+		if (hits)
+		{
+			if (isect.lightID >= 0)
+			{	
+				const AbstractLight* direct_light = mScene.GetLightPtr(isect.lightID);
+			}
+		}
+		auto wilOut = wil;
+		pdf = p1 * (sampleDiff ? mat.pDiff : mat.pSpec);
+		return wilOut;
+	}
+
+		
+	/* the same function as below, but it returns direction instead of a color */
+	Vec3f sampleBRDF(
+			const Vec3f hitPos, 
+			const Vec3f wol,
+			const Frame frame,
+			const Material mat,
+			const  bool sampleDiff,
+			const Vec3f R,
+			const Frame frameR,
+			Isect & isect,
+			Ray & n_ray,
+			float & pdf,
+			bool & hits)
+	{
+		float p1, w;
+		Vec2f in = Vec2f(getRand(), getRand());
+		Vec3f wil = sampleDiff ? SampleCosHemisphereW(in, &p1) : SamplePowerCosHemisphereW(in, mat.mPhongExponent, &p1);
+		if(!sampleDiff)	wil = frameR.ToWorld(wil);
+		Vec3f wig = frame.ToWorld(wil);
+
+		n_ray = Ray(hitPos, wig, 0.00001);
+		isect.dist = 1e36f;
+		
+		hits = mScene.Intersect(n_ray, isect);
+		if (hits)
+		{
+			if (isect.lightID >= 0)
+			{	
+				const AbstractLight* direct_light = mScene.GetLightPtr(isect.lightID);
+			}
+		}
+		auto wilOut = wil;
+		pdf = p1 * (sampleDiff ? mat.pDiff : mat.pSpec);
+		return wilOut;
 	}
 
 	Vec3f colorSampleBRDF(Vec3f hitPos, Vec3f wol, Frame frame, Material mat, bool sampleDiff, Vec3f R, Frame frameR, Isect & isect, Ray & n_ray, Vec3f & wilOut, float & pdf, bool & hits)
