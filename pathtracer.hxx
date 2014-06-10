@@ -118,7 +118,8 @@ public:
 				// scattering
 				auto xs = ray.org + ray.dir * s;
 				accum += thrput * scatteredRadiance(xs);
-				wil = sampleMedium (hitPos, wol, frame, mat, sampleDiff, R, frameR, hit, ray, pdf, hits);
+				wil = sampleMedium (xs, wol, frame, mat, sampleDiff, R, frameR, hit, ray, pdf, hits);
+				thrput *= (sigma_s / sigma_t);
 			}
 			else
 			{
@@ -141,7 +142,7 @@ public:
 		return accum;
 	}
 
-	Vec3f directLight (Ray ray)	// poËÌt· radianci pro smÏr, 
+	Vec3f directLight (Ray ray)	// po√®√≠t√° radianci pro sm√¨r, 
 	{
 		Vec3f accum = Vec3f(0);
 		Isect hit;
