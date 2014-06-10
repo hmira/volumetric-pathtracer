@@ -70,17 +70,9 @@ public:
 		return exp(-sigma_t * l);
 	}
 
-	Vec3f scatteredRadiance(const Vec3f& x, const Vec3f& w, Frame frame, Material mat, bool sampleDiff, Vec3f R, Frame frameR)
+	Vec3f scatteredRadiance(const Vec3f& x)
 	{
-		//float pdf;
-		//Vec2f in = Vec2f(getRand(), getRand());
-		
-		//auto wo = SampleUniformSphereW(in, &pdf);
-		//return Vec3f(0);
-		//return ( sigma_s/sigma_t );
-
-		return (sigma_s/sigma_t) * ( INV_PI_F * 0.25) * colorSampleLight2(x, w);
-
+		return (sigma_s/sigma_t) * ( INV_PI_F * 0.25) * colorSampleLight2(x);
 	}
 
 	Vec3f getLi(Ray ray)
@@ -153,46 +145,37 @@ public:
 		Frame frameR = Frame();
 		frameR.SetFromZ(R);
 
-		bool sampleDiff = getRand()<mat.pDiff;
+		bool sampleDiff = getRand() < mat.pDiff;
+
+		/*INCLUDED IN SCATTERING*/
 		auto s = selectDistance(ray.org, ray.dir);
 		if (s < hit.dist)
 		{
 			auto xs = ray.org + ray.dir * s;
-			accum += e_pow_sigma_t(s) * scatteredRadiance(xs, wol, frame, mat, sampleDiff, R, frameR);
+			accum += /*e_pow_sigma_t(s) */ scatteredRadiance(xs);
 		}
 		else
 		{
 			if (hit.lightID >= 0) accum += mScene.GetLightPtr(hit.lightID)->getRadiance(); // * e_pow_sigma_t(hit.dist);
 
-			/*
-				First, let's decide, which component we want to sample:
-			*/
-
-
-			/*	F I R S T   S A M P L I N G   M E T H O D  */
-
-			//TODO because of eliminating the MIS
-			accum += /* e_pow_sigma_t(hit.dist) */ colorSampleLight(hitPos, wol, frame, mat, sampleDiff, R, frameR);
-
-			/*	S E C O N D   S A M P L I N G   M E T H O D  */
+			accum += colorSampleLight(hitPos, wol, frame, mat, sampleDiff, R, frameR);
 
 			Vec3f wil;
 			float pdf;
-			//accum += colorSampleBRDF	(hitPos, wol, frame, mat, sampleDiff, R, frameR, hit, ray, wil, pdf, hits);
 		}
 
 		return accum;
 	}
 
-	Vec3f colorSampleLight2(Vec3f hitPos, Vec3f wol)
+	Vec3f colorSampleLight2(Vec3f hitPos)
 	{
 		Vec3f accum = Vec3f(0);
 		const AbstractLight* light =  mScene.GetLightPtr(floor(getRand()*mScene.GetLightCount()));
 		float lightDist;
 		Vec3f wig = light->sampleDir(hitPos, lightDist);
+		if(wig.IsZero()) return accum;
+
 		float p0 = light->getPDF(wig, lightDist) / mScene.GetLightCount();
-		//p0 *= 2;
-		//p0 *= PI_F * 4;
 		if( ! mScene.Occluded(hitPos, wig, lightDist) )
 		{
 			accum =  light->getRadiance() / p0;
@@ -218,12 +201,7 @@ public:
 		if( ! mScene.Occluded(hitPos, wig, lightDist) )
 		{
 			float p0 = light->getPDF(wig, lightDist) / mScene.GetLightCount();
-			float p1 = sampleDiff ? CosHemispherePdfW(frame.mZ, wig) : PowerCosHemispherePdfW(R, wil, mat.mPhongExponent);
-			//TODO because of eliminating the MIS
-			//float w = 1 / (p0 + p1);
 			float w = 1.f / p0;
-			//TODO because of eliminating the MIS
-			//if(light->isPoint) w = 1.0f/p0;
 			accum =  w * light->getRadiance() * wil.z * (sampleDiff ? mat.evalBrdfDiff(wil, wol)*mat.ipDiff : mat.evalBrdfSpec(wil, wol)*mat.ipSpec);
 			accum *= e_pow_sigma_t(lightDist);
 		}
