@@ -16,8 +16,6 @@ float sigma_s = 0.2f; // SCATTERING
 //float sigma_s = 0.0f; // SCATTERING
 float sigma_t = sigma_a + sigma_s; // EXTINCTION
 
-// Right now this is a copy of EyeLight renderer. The task is to change this 
-// to a full-fledged path tracer.
 class PathTracer : public AbstractRenderer
 {
 public:
@@ -43,10 +41,12 @@ public:
 
             const Vec2f sample = Vec2f(float(x), float(y)) + mRng.GetVec2f();
 
-            Ray   ray = mScene.mCamera.GenerateRay(sample);
+            Ray ray = mScene.mCamera.GenerateRay(sample);
             
-			Vec3f rad = getLi(ray);
-			//Vec3f rad = directLight(ray);
+			// method for path tracing
+			//Vec3f rad = getLi(ray);
+			// method for direct lighting
+			Vec3f rad = directLight(ray);
 
 			mFramebuffer.AddColor(sample, rad);
         }
@@ -70,11 +70,18 @@ public:
 		return exp(-sigma_t * l);
 	}
 
+	/**
+	* Counts light contribution to the point in medium. 
+	*/
 	Vec3f scatteredRadiance(const Vec3f& x)
 	{
+		// scattering factor, selectDistance pdf, phase function and the light contribution
 		return (sigma_s/sigma_t) * ( INV_PI_F * 0.25) * colorSampleLight2(x);
 	}
 
+	/**
+	* Method for volumetric path tracing.
+	*/
 	Vec3f getLi(Ray ray)
 	{
 		Vec3f thrput = Vec3f(1);
@@ -83,17 +90,20 @@ public:
 		Isect hit;
 		bool hits;
 
-		for(int i=0; i<1000; i++)
+		for(int i = 0; i < 1000; i++)
 		{
-			if(i==0)
+			if(i == 0)
 			{
+				// inicialization
 				hit.dist = 1e36f;
 				ray.tmin = EPS_RAY;
 				hits = mScene.Intersect(ray, hit);
-				if(hit.lightID >= 0) accum += thrput * ((AreaLight*) mScene.GetLightPtr(hit.lightID))->getRadiance();
+				if (hit.lightID >= 0) accum += thrput * e_pow_sigma_t(hit.dist) * ((AreaLight*)mScene.GetLightPtr(hit.lightID))->getRadiance();
 			}
-			if(!hits) break;
+			
+			//if(!hits) break;
 
+			// the surface point hit by the ray
 			Vec3f hitPos = ray.org + ray.dir * hit.dist;
 			const Material& mat = mScene.GetMaterial( hit.matID );
 			Frame frame; frame.SetFromZ(hit.normal);
@@ -104,37 +114,42 @@ public:
 			Frame frameR = Frame();
 			frameR.SetFromZ(R);
 
-
 			Vec3f wil, wig;
 			float pdf;
 
 			float rand =  getRand();
-			bool sampleDiff = rand<mat.pDiff;
+			// NOTE: there needs to be <=, if there were only <, we get some black dots in the image
+			bool sampleDiff = rand <= mat.pDiff;
 
 			/* INCLUDED IN SCATTERING */
+			// randomly select a distance on the ray
 			auto s = selectDistance(ray.org, ray.dir);
+			// if we got shorter distance than ray length, we're in a medium
 			if (s < hit.dist)
 			{
-				// scattering
+				// computes the light contribution for the point in medium
 				auto xs = ray.org + ray.dir * s;
 				accum += thrput * scatteredRadiance(xs);
-				wil = sampleMedium (xs, wol, frame, mat, sampleDiff, R, frameR, hit, ray, pdf, hits);
+				wil = sampleMedium(xs, wol, frame, mat, sampleDiff, R, frameR, hit, ray, pdf, hits);
 				thrput *= (sigma_s / sigma_t);
 			}
+			// else we got greater distance than ray lenght, we'll take the surface point
 			else
 			{
-	
-				// reflectance: 
+				// computes the light contribution for the point on surface
 				float rho = sampleDiff ? mat.getReflectanceDiff(wol)*mat.ipDiff : mat.getReflectanceSpec(wol)*mat.ipSpec;
 				accum += thrput * colorSampleLight(hitPos, wol, frame, mat, sampleDiff, R, frameR);
-				wil = sampleBRDF (hitPos, wol, frame, mat, sampleDiff, R, frameR, hit, ray, pdf, hits);
+				wil = sampleBRDF(hitPos, wol, frame, mat, sampleDiff, R, frameR, hit, ray, pdf, hits);
+				// russian roulette
 				if(rand < rho)
 				{
 					if(wil.z<0) break;
 					thrput *= (sampleDiff ? mat.evalBrdfDiff(wil, wol) : mat.evalBrdfSpec(wil, wol))* wil.z / (rho * pdf);
+					//thrput *= mat.evalBrdfDiff(wil, wol) * wil.z / (rho * pdf);
 				}
 				else 
 				{
+					// termination of the path
 					break;
 				}
 			}
@@ -142,7 +157,10 @@ public:
 		return accum;
 	}
 
-	Vec3f directLight (Ray ray)	// poèítá radianci pro smìr, 
+	/**
+	* Method for direct lighting in volumetric renderer.
+	*/
+	Vec3f directLight(Ray ray)	// poèítá radianci pro smìr, 
 	{
 		Vec3f accum = Vec3f(0);
 		Isect hit;
@@ -162,16 +180,21 @@ public:
 		bool sampleDiff = getRand() < mat.pDiff;
 
 		/*INCLUDED IN SCATTERING*/
+		// randomly select a distance on the ray
 		auto s = selectDistance(ray.org, ray.dir);
+		// if we sampled the distance shorter than ray
 		if (s < hit.dist)
 		{
-			auto xs = ray.org + ray.dir * s;
-			accum += /*e_pow_sigma_t(s) */ scatteredRadiance(xs);
+			// sample the light for the point in medium
+			auto xs = ray.org + ray.dir * s;	// point in medium
+			accum += scatteredRadiance(xs);
 		}
 		else
 		{
-			if (hit.lightID >= 0) accum += mScene.GetLightPtr(hit.lightID)->getRadiance(); // * e_pow_sigma_t(hit.dist);
+			// we hit light
+			if (hit.lightID >= 0) accum += mScene.GetLightPtr(hit.lightID)->getRadiance(); 
 
+			// sample the light for the point on surface
 			accum += colorSampleLight(hitPos, wol, frame, mat, sampleDiff, R, frameR);
 
 			Vec3f wil;
@@ -181,6 +204,9 @@ public:
 		return accum;
 	}
 
+	/**
+	* Samples the light for a point in medium.
+	*/
 	Vec3f colorSampleLight2(Vec3f hitPos)
 	{
 		Vec3f accum = Vec3f(0);
@@ -199,7 +225,9 @@ public:
 		return accum;
 	}
 
-
+	/**
+	* Samples the light for a surface point.
+	*/
 	Vec3f colorSampleLight(Vec3f hitPos, Vec3f wol, Frame frame, Material mat, bool sampleDiff, Vec3f R, Frame frameR)
 	{
 		Vec3f accum = Vec3f(0);
@@ -211,7 +239,6 @@ public:
 
 		Vec3f wil = frame.ToLocal(wig);
 	
-
 		if( ! mScene.Occluded(hitPos, wig, lightDist) )
 		{
 			float p0 = light->getPDF(wig, lightDist) / mScene.GetLightCount();
@@ -223,8 +250,9 @@ public:
 		return accum;
 	}
 
-
-	/* the sampling function of the medium */
+	/**
+	* Uniform sampling of the new direction for the point in medium. 
+	*/
 	Vec3f sampleMedium(
 			const Vec3f hitPos, 
 			const Vec3f wol,
@@ -236,7 +264,8 @@ public:
 			Isect & isect,
 			Ray & n_ray,
 			float & pdf,
-			bool & hits)
+			bool & hits
+			)
 	{
 		float p1, w;
 		Vec2f in = Vec2f(getRand(), getRand());
@@ -244,12 +273,15 @@ public:
 		if(!sampleDiff)	wil = frameR.ToWorld(wil);
 		Vec3f wig = frame.ToWorld(wil);
 
+		// new ray
 		n_ray = Ray(hitPos, wig, 0.00001);
 		isect.dist = 1e36f;
 		
+		// intersecting the scene with the new ray
 		hits = mScene.Intersect(n_ray, isect);
 		if (hits)
 		{
+			// if we hit the light
 			if (isect.lightID >= 0)
 			{	
 				const AbstractLight* direct_light = mScene.GetLightPtr(isect.lightID);
@@ -261,7 +293,9 @@ public:
 	}
 
 		
-	/* the same function as below, but it returns direction instead of a color */
+	/**
+	* Method for BRDF Importance Sampling. Returns the new direction.
+	*/
 	Vec3f sampleBRDF(
 			const Vec3f hitPos, 
 			const Vec3f wol,
@@ -273,7 +307,8 @@ public:
 			Isect & isect,
 			Ray & n_ray,
 			float & pdf,
-			bool & hits)
+			bool & hits
+			)
 	{
 		float p1, w;
 		Vec2f in = Vec2f(getRand(), getRand());
@@ -296,6 +331,10 @@ public:
 		pdf = p1 * (sampleDiff ? mat.pDiff : mat.pSpec);
 		return wilOut;
 	}
+
+
+
+
 
 	Vec3f colorSampleBRDF(Vec3f hitPos, Vec3f wol, Frame frame, Material mat, bool sampleDiff, Vec3f R, Frame frameR, Isect & isect, Ray & n_ray, Vec3f & wilOut, float & pdf, bool & hits)
 	{
@@ -347,6 +386,5 @@ public:
 	}
 
 
-
-    Rng              mRng;
+    Rng mRng;
 };
