@@ -44,9 +44,9 @@ public:
             Ray ray = mScene.mCamera.GenerateRay(sample);
             
 			// method for path tracing
-			//Vec3f rad = getLi(ray);
+			Vec3f rad = getLi(ray);
 			// method for direct lighting
-			Vec3f rad = directLight(ray);
+			//Vec3f rad = directLight(ray);
 
 			mFramebuffer.AddColor(sample, rad);
         }
