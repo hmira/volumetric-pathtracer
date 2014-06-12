@@ -129,7 +129,7 @@ public:
 				// computes the light contribution for the point in medium
 				auto xs = ray.org + ray.dir * s;
 				accum += thrput * scatteredRadiance(xs);
-				wil = sampleMedium(xs, wol, frame, mat, sampleDiff, R, frameR, hit, ray, pdf, hits);
+				wil = sampleMedium(xs, wol, hit, ray, pdf, hits);
 				thrput *= (sigma_s / sigma_t);
 			}
 			// else we got greater distance than ray lenght, we'll take the surface point
@@ -258,11 +258,6 @@ public:
 	Vec3f sampleMedium(
 			const Vec3f hitPos, 
 			const Vec3f wol,
-			const Frame frame,
-			const Material mat,
-			const  bool sampleDiff,
-			const Vec3f R,
-			const Frame frameR,
 			Isect & isect,
 			Ray & n_ray,
 			float & pdf,
@@ -272,8 +267,8 @@ public:
 		float p1, w;
 		Vec2f in = Vec2f(getRand(), getRand());
 		Vec3f wil = SampleUniformSphereW(in, &p1);
-		if(!sampleDiff)	wil = frameR.ToWorld(wil);
-		Vec3f wig = frame.ToWorld(wil);
+		// no need of frame transformation
+		Vec3f wig = wil;
 
 		// new ray
 		n_ray = Ray(hitPos, wig, 0.00001);
@@ -290,7 +285,7 @@ public:
 			}
 		}
 		auto wilOut = wil;
-		pdf = p1 * (sampleDiff ? mat.pDiff : mat.pSpec);
+		pdf = p1;
 		return wilOut;
 	}
 
