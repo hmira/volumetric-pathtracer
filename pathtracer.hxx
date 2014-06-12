@@ -108,8 +108,7 @@ public:
 			const Material& mat = mScene.GetMaterial( hit.matID );
 			Frame frame; frame.SetFromZ(hit.normal);
 			const Vec3f wol = frame.ToLocal(-ray.dir);
-			if(wol.z<=0) break;
-
+			
 			Vec3f R = ReflectLocal(wol);
 			Frame frameR = Frame();
 			frameR.SetFromZ(R);
@@ -136,6 +135,9 @@ public:
 			// else we got greater distance than ray lenght, we'll take the surface point
 			else
 			{
+				if(!hits) break;
+				if(wol.z<=0) break;
+				
 				// computes the light contribution for the point on surface
 				float rho = sampleDiff ? mat.getReflectanceDiff(wol)*mat.ipDiff : mat.getReflectanceSpec(wol)*mat.ipSpec;
 				accum += thrput * colorSampleLight(hitPos, wol, frame, mat, sampleDiff, R, frameR);
